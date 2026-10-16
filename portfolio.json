@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "name": "beacon-lab-ryan-vo",
+  "owner": "A220man",
+  "email": "ryandtvo@gmail.com",
+  "domain": "AI/ML developer tools \u2014 agent skill discovery and validation infrastructure",
+  "summary": "Work in progress: beacon-lab-ryan-vo",
+  "workflows": [
+    "Recursive discovery and validation of SKILL.md files across nested directory structures",
+    "Persistent indexing of discovered skills in SQLite with full-text search by name, topic, and description",
+    "Import (discover) \u2192 Search \u2192 Detail \u2192 Export workflow for agent skill repositories"
+  ],
+  "auth": "oidc-keycloak-saml-broker",
+  "llm_providers": [
+    "openai-compatible",
+    "anthropic",
+    "gemini",
+    "ollama"
+  ],
+  "license": "MIT",
+  "status": "work-in-progress"
+}
