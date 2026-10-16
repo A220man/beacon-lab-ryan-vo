@@ -1,0 +1,46 @@
+import './SkillTable.css';
+
+/* SkillTable component styles */
+.table-container {
+  overflow-x: auto;
+}
+.skill-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.skill-table th,
+.skill-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+.skill-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+.skill-table tbody tr:hover {
+  background: #f9f9f9;
+}
+.row-valid { background-color: rgba(76, 175, 80, 0.03); }
+.row-invalid { background-color: rgba(244, 67, 54, 0.03); }
+.cell-name { font-weight: 500; }
+.cell-desc { color: #666; max-width: 250px; }
+.cell-path { font-family: monospace; font-size: 0.8rem; color: #888; }
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.badge-valid { background: #e8f5e9; color: #2e7d32; }
+.badge-invalid { background: #ffebee; color: #c62828; }
+.error-row td { background: #fff3e0; }
+.error-list-inline {
+  list-style: disc inside;
+  color: #c62828;
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
+}
+.empty-table { text-align: center; padding: 2rem; color: #888; }
