@@ -10,7 +10,7 @@ skill-discovery
 
 ### skill-discovery — Skill Discovery Engine
 
-Status: in_progress
+Status: done
 
 Acceptance:
 - Backend recursively walks an arbitrary directory tree and finds all SKILL.md files
@@ -22,9 +22,9 @@ Acceptance:
 - Frontend dashboard lets a user enter a path, run discovery, and search results
 - At least 12 backend tests and 3 frontend tests pass
 
-Implementation: `backend/app/core/engine.py`, `backend/app/core/models.py`, `backend/app/api/skills.py`, `backend/app/db/database.py`, `backend/app/main.py`, `frontend/src/api/client.ts`, `frontend/src/components/SkillDashboard.tsx`, `frontend/src/components/SkillTable.tsx`
+Implementation: `backend/app/core/engine.py`, `backend/app/core/models.py`, `backend/app/api/skills.py`, `backend/app/db/database.py`, `backend/app/main.py`, `backend/app/services/skill_service.py`, `backend/app/core/validators.py`, `frontend/src/api/client.ts`, `frontend/src/components/SkillDashboard.tsx`, `frontend/src/components/SkillTable.tsx`, `frontend/src/types/index.ts`
 
-Tests: `backend/tests/test_engine.py`, `backend/tests/test_api.py`, `frontend/tests/dashboard.test.tsx`
+Tests: `backend/tests/test_engine.py`, `backend/tests/test_api.py`, `backend/tests/test_service.py`, `backend/tests/test_validators.py`, `frontend/tests/dashboard.test.tsx`
 
 ### oidc-auth — OIDC Authentication via Keycloak
 
