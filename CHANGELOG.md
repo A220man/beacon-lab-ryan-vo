@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — work-in-progress checkpoint
+
+Partial code published for continued development. Known issues: STATUS.md.
+
 ## 1.0.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
@@ -27,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - AI/ML evaluation section with labeled dataset and metrics
 
 ### Known Limitations
+
 - No authentication (OIDC/Keycloak integration is planned)
 - No LLM provider adapters (planned)
 - No WSL-safe documentation search engine (the discovery engine uses simple file I/O, not mmap)
