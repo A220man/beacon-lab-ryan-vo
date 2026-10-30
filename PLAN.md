@@ -4,7 +4,7 @@ Each round completes one feature or repair. Future items are planned, not implem
 
 ## Current round
 
-skill-discovery
+skill-linter
 
 ## Roadmap
 
@@ -60,10 +60,14 @@ Acceptance:
 
 ### skill-linter — Advanced Skill Linter
 
-Status: planned
+Status: done
 
 Acceptance:
 - Completeness score based on required sections
 - Lint rules for common skill authoring mistakes
 - Export lint report as JSON
+
+Implementation: `backend/app/core/validators.py`, `backend/app/api/skills.py`, `backend/app/core/models.py`
+
+Tests: `backend/tests/test_validators.py`, `backend/tests/test_api.py`
 

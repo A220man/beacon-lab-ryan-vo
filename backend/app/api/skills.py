@@ -10,14 +10,13 @@ Endpoints:
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
 from typing import Any
-
 from fastapi import APIRouter, HTTPException, Query
-
 from app.core.engine import discover_skills
-from app.core.models import DiscoveryRequest, DiscoveryReport, SearchResponse, SearchResult
 from app.db import database
+from app.core.validators import lint_skill, validate_content
+from app.core.models import DiscoveryRequest, DiscoveryReport, SearchResponse, SearchResult, ValidationRequest, ValidationResponse
+
 
 router = APIRouter()
 
@@ -118,5 +117,25 @@ def clear_index(
     db_path = database.get_db_path()
     with database.get_connection(db_path) as conn:
         deleted = database.clear_skills(conn, root_path=root_path)
-
     return {"deleted": deleted}
+
+
+
+@router.post("/validate", response_model=ValidationResponse)
+def validate(request: ValidationRequest) -> ValidationResponse:
+    """Validate and lint a SKILL.md file's content.
+
+    Returns a completeness score (0-100), missing sections, word count,
+    recommendations, and optional lint issues.
+    """
+    report = validate_content(request.content)
+    lint_issues: list[str] = []
+    if request.include_lint:
+        lint_issues = lint_skill(request.content)
+    return ValidationResponse(
+        score=report.score,
+        missing_sections=report.missing_sections,
+        word_count=report.word_count,
+        recommendations=report.recommendations,
+        lint_issues=lint_issues,
+    )

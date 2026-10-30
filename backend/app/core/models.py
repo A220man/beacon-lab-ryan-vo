@@ -65,4 +65,18 @@ class SearchResponse(BaseModel):
     total: int
     limit: int
     offset: int
-    query: str
+    query: str = Field(default="", description="Search query used")
+class ValidationRequest(BaseModel):
+    """Request to validate/lint a skill's content."""
+    model_config = {"extra": "forbid"}
+    content: str = Field(..., min_length=1, description="Full content of the SKILL.md file")
+    include_lint: bool = Field(default=True, description="Whether to run lint checks")
+
+
+class ValidationResponse(BaseModel):
+    """Response from content validation."""
+    score: int = Field(..., ge=0, le=100, description="Completeness score (0-100)")
+    missing_sections: list[str] = Field(default_factory=list, description="Required sections not found")
+    word_count: int = Field(..., ge=0, description="Approximate word count of body content")
+    recommendations: list[str] = Field(default_factory=list, description="Suggested improvements")
+    lint_issues: list[str] = Field(default_factory=list, description="Lint warnings (if enabled)")
