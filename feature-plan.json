@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "product": "beacon-lab-ryan-vo",
-  "current_feature": "skill-discovery",
+  "current_feature": "skill-linter",
   "features": [
     {
       "id": "skill-discovery",
@@ -82,14 +82,21 @@
     {
       "id": "skill-linter",
       "title": "Advanced Skill Linter",
-      "status": "planned",
+      "status": "done",
       "acceptance": [
         "Completeness score based on required sections",
         "Lint rules for common skill authoring mistakes",
         "Export lint report as JSON"
       ],
-      "implementation": [],
-      "tests": []
+      "implementation": [
+        "backend/app/core/validators.py",
+        "backend/app/api/skills.py",
+        "backend/app/core/models.py"
+      ],
+      "tests": [
+        "backend/tests/test_validators.py",
+        "backend/tests/test_api.py"
+      ]
     }
   ]
 }

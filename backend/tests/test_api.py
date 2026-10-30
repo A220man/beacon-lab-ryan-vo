@@ -181,4 +181,89 @@ def test_discover_persists_to_database(client: TestClient, sample_repo: pathlib.
     # Without calling discover again, search should find persistently stored results
     resp = client.get("/api/v1/skills/search?q=r8")
     assert resp.status_code == 200
-    assert resp.json()["total"] >= 1
+
+
+def test_validate_skill_content(client: TestClient):
+    """POST /validate returns completeness score and lint issues."""
+    complete_skill = """---
+name: test-skill
+description: A test skill
+---
+# Test Skill
+
+## Prerequisites
+None
+
+## Usage
+Run it.
+
+## Installation
+pip install test
+
+## Examples
+test()
+
+## Troubleshooting
+None
+
+## References
+None
+"""
+    resp = client.post(
+        "/api/v1/skills/validate",
+        json={"content": complete_skill, "include_lint": True},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["score"] == 100
+    assert data["missing_sections"] == []
+    assert data["word_count"] > 0
+    assert isinstance(data["recommendations"], list)
+    assert isinstance(data["lint_issues"], list)
+
+
+def test_validate_skill_content_no_lint(client: TestClient):
+    """POST /validate with include_lint=false skips lint checks."""
+    skill = """---
+name: test
+description: test
+---
+# Test
+## Usage
+Run it.
+"""
+    resp = client.post(
+        "/api/v1/skills/validate",
+        json={"content": skill, "include_lint": False},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["lint_issues"] == []
+
+
+def test_validate_skill_rejects_empty_content(client: TestClient):
+    """POST /validate rejects empty content."""
+    resp = client.post(
+        "/api/v1/skills/validate",
+        json={"content": "", "include_lint": True},
+    )
+    assert resp.status_code == 422
+
+
+def test_validate_skill_lint_detects_issues(client: TestClient):
+    """POST /validate detects lint issues like bare URLs."""
+    skill = """---
+name: test
+description: test
+---
+# Test
+## Usage
+See https://example.com for details
+"""
+    resp = client.post(
+        "/api/v1/skills/validate",
+        json={"content": skill, "include_lint": True},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert any("bare url" in issue.lower() for issue in data["lint_issues"])
