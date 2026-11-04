@@ -149,3 +149,28 @@ def test_lint_skill_no_title():
     content = "---\nname: test\ndescription: test\n---\n\nNo h1 here.\n"
     issues = lint_skill(content)
     assert any("h1" in i.lower() for i in issues)
+def test_lint_skill_empty_section():
+    """Empty sections (headers with no content) are flagged."""
+    content = (
+        "---\nname: test\ndescription: test\n---\n\n"
+        "# Title\n\n"
+        "## Usage\n\n"
+        "## Installation\n\n"
+        "Content here.\n"
+    )
+    issues = lint_skill(content)
+    assert any("empty section" in i.lower() for i in issues)
+    # Should detect "Usage" as empty
+    assert any("Usage" in i for i in issues)
+
+
+def test_lint_skill_no_empty_sections():
+    """Sections with content are not flagged as empty."""
+    content = (
+        "---\nname: test\ndescription: test\n---\n\n"
+        "# Title\n\n"
+        "## Usage\n\nRun it.\n\n"
+        "## Installation\n\nInstall it.\n"
+    )
+    issues = lint_skill(content)
+    assert not any("empty section" in i.lower() for i in issues)
