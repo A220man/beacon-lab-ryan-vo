@@ -158,7 +158,6 @@ def lint_skill(content: str) -> list[str]:
     # Check for excessive consecutive blank lines (3+)
     if re.search(r"\n{4,}", body):
         issues.append("Excessive blank lines (3 or more consecutive)")
-
     # Check for bare URLs (should use markdown link syntax)
     bare_urls = re.findall(r"(?<!\]\()https?://\S+", body)
     if bare_urls:
@@ -167,4 +166,43 @@ def lint_skill(content: str) -> list[str]:
             "[text](url) instead"
         )
 
+    # Check for empty sections (headers with no content)
+    empty_sections = _find_empty_sections(body)
+    if empty_sections:
+        issues.append(
+            f"Found {len(empty_sections)} empty section(s): {', '.join(empty_sections)} — "
+            "add content or remove the header"
+        )
+
     return issues
+
+
+def _find_empty_sections(body: str) -> list[str]:
+    """Find markdown headers that have no content before the next header.
+    
+    Returns a list of header texts that appear to have empty content.
+    Skips h1 headers as they are typically document titles, not content sections.
+    """
+    # Find all headers (h1-h4) with their line positions
+    header_pattern = re.compile(r"^(#{1,4})\s+(.+?)\s*#*\s*$", re.MULTILINE)
+    headers = [(m.start(), m.group(1).strip(), m.group(2).strip()) for m in header_pattern.finditer(body)]
+    
+    empty: list[str] = []
+    for i, (pos, level, text) in enumerate(headers):
+        # Skip h1 headers (document titles)
+        if level == "#":
+            continue
+        
+        # Content starts after this header's line
+        content_start = body.find('\n', pos) + 1
+        if content_start <= 0:
+            content_start = len(body)
+        
+        # Content ends at next header or end of body
+        content_end = headers[i + 1][0] if i + 1 < len(headers) else len(body)
+        
+        section_content = body[content_start:content_end].strip()
+        if not section_content:
+            empty.append(text)
+    
+    return empty
