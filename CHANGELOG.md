@@ -1,8 +1,20 @@
 # Changelog
 
-## 1.3.0 — work-in-progress checkpoint
+## 1.4.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
+
+## 1.3.0 — work-in-progress checkpoint
+
+### Fixed
+- Fixed import error in `backend/tests/test_engine.py` (was `from backend.tests.conftest` now `from tests.conftest`)
+
+### Verified
+- All 67 backend tests pass
+- All 5 frontend tests pass
+- Skill-linter feature complete: completeness scoring, lint checks, validation API endpoint
+
+Partial code published for continued development. See STATUS.md.
 
 ## 1.2.0 — work-in-progress checkpoint
 
@@ -41,6 +53,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Known Limitations
 
 - No authentication (OIDC/Keycloak integration is planned)
-- No LLM provider adapters (planned)
-- No WSL-safe documentation search engine (the discovery engine uses simple file I/O, not mmap)
-- No advanced skill linter (planned)
