@@ -20,7 +20,7 @@ from app.core.engine import (
     validate_skill,
     SKILL_FILENAME,
 )
-from backend.tests.conftest import VALID_SKILL_R8
+from tests.conftest import VALID_SKILL_R8
 
 
 # --- Topic derivation --------------------------------------------------------
