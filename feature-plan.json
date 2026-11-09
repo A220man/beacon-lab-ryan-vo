@@ -91,11 +91,13 @@
       "implementation": [
         "backend/app/core/validators.py",
         "backend/app/api/skills.py",
-        "backend/app/core/models.py"
+        "backend/app/core/models.py",
+        "backend/app/api/skills.py (lint by ID endpoint)"
       ],
       "tests": [
         "backend/tests/test_validators.py",
-        "backend/tests/test_api.py"
+        "backend/tests/test_api.py",
+        "backend/tests/test_api.py (lint by ID tests)"
       ]
     }
   ]

@@ -9,13 +9,14 @@ Endpoints:
 """
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from app.core.engine import discover_skills
 from app.db import database
 from app.core.validators import lint_skill, validate_content
-from app.core.models import DiscoveryRequest, DiscoveryReport, SearchResponse, SearchResult, ValidationRequest, ValidationResponse
+from app.core.models import DiscoveryRequest, DiscoveryReport, SearchResponse, SearchResult, ValidationRequest, ValidationResponse, SkillRecord
 
 
 router = APIRouter()
@@ -43,9 +44,51 @@ def discover(request: DiscoveryRequest) -> DiscoveryReport:
     # Persist to database
     db_path = database.get_db_path()
     with database.get_connection(db_path) as conn:
-        database.save_discovery(conn, report)
+        run_id = database.save_discovery(conn, report)
 
-    return report
+    # Re-fetch skills from database for this discovery run to get assigned IDs
+    with database.get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, path, name, description, topic, scope, valid, errors,
+                   content_length, discovered_at, root_path
+            FROM skills
+            WHERE discovery_run_id = ?
+            ORDER BY COALESCE(topic, '') ASC, COALESCE(name, path) ASC
+            """,
+            (run_id,),
+        ).fetchall()
+
+    # Convert to SkillRecord with IDs
+    skills_with_ids = []
+    for row in rows:
+        row_dict = dict(row)
+        row_dict["errors"] = json.loads(row_dict["errors"]) if row_dict.get("errors") else []
+        row_dict["valid"] = bool(row_dict["valid"])
+        skill = SkillRecord(
+            id=row_dict["id"],
+            path=row_dict["path"],
+            name=row_dict["name"],
+            description=row_dict["description"],
+            topic=row_dict["topic"],
+            scope=row_dict["scope"],
+            valid=row_dict["valid"],
+            errors=row_dict["errors"],
+            content_length=row_dict["content_length"],
+            discovered_at=row_dict["discovered_at"],
+            root_path=row_dict["root_path"],
+        )
+        skills_with_ids.append(skill)
+
+    return DiscoveryReport(
+        skills=skills_with_ids,
+        total_found=report.total_found,
+        total_valid=report.total_valid,
+        total_invalid=report.total_invalid,
+        root_path=report.root_path,
+        errors=report.errors,
+        discovered_at=report.discovered_at,
+    )
 
 
 @router.get("/search", response_model=SearchResponse)
@@ -138,4 +181,47 @@ def validate(request: ValidationRequest) -> ValidationResponse:
         word_count=report.word_count,
         recommendations=report.recommendations,
         lint_issues=lint_issues,
+    )
+
+
+@router.get("/{skill_id}/lint", response_model=ValidationResponse)
+def lint_skill_by_id(
+    skill_id: int,
+    include_lint: bool = Query(default=True, description="Whether to run lint checks"),
+) -> ValidationResponse:
+    """Get lint report for a discovered skill by ID.
+
+    Fetches the skill's file content from disk and runs validation/linting.
+    """
+    db_path = database.get_db_path()
+    with database.get_connection(db_path) as conn:
+        skill = database.get_skill_by_id(conn, skill_id)
+
+    if skill is None:
+        raise HTTPException(status_code=404, detail=f"Skill not found: id={skill_id}")
+
+    # Resolve the full path to the SKILL.md file
+    root_path = skill.get("root_path") or "."
+    skill_path = skill.get("path", "")
+    full_path = os.path.join(root_path, skill_path)
+
+    if not os.path.exists(full_path):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Skill file not found on disk: {full_path}",
+        )
+
+    with open(full_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    report = validate_content(content)
+    lint_issues_list: list[str] = []
+    if include_lint:
+        lint_issues_list = lint_skill(content)
+    return ValidationResponse(
+        score=report.score,
+        missing_sections=report.missing_sections,
+        word_count=report.word_count,
+        recommendations=report.recommendations,
+        lint_issues=lint_issues_list,
     )
