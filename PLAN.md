@@ -67,7 +67,7 @@ Acceptance:
 - Lint rules for common skill authoring mistakes
 - Export lint report as JSON
 
-Implementation: `backend/app/core/validators.py`, `backend/app/api/skills.py`, `backend/app/core/models.py`
+Implementation: `backend/app/core/validators.py`, `backend/app/api/skills.py`, `backend/app/core/models.py`, `backend/app/api/skills.py (lint by ID endpoint)`
 
-Tests: `backend/tests/test_validators.py`, `backend/tests/test_api.py`
+Tests: `backend/tests/test_validators.py`, `backend/tests/test_api.py`, `backend/tests/test_api.py (lint by ID tests)`
 

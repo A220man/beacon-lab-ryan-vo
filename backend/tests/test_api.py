@@ -267,3 +267,68 @@ See https://example.com for details
     assert resp.status_code == 200
     data = resp.json()
     assert any("bare url" in issue.lower() for issue in data["lint_issues"])
+
+def test_lint_skill_by_id(client: TestClient, sample_repo: pathlib.Path):
+    """GET /{id}/lint returns lint report for a discovered skill."""
+    # First discover skills
+    resp = client.post(
+        "/api/v1/skills/discover",
+        json={"repository_path": str(sample_repo)},
+    )
+    assert resp.status_code == 201
+    skills = resp.json()["skills"]
+    assert len(skills) > 0
+    skill_id = skills[0]["id"]
+
+    # Lint the skill by ID
+    resp = client.get(f"/api/v1/skills/{skill_id}/lint?include_lint=true")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "score" in data
+    assert "missing_sections" in data
+    assert "word_count" in data
+    assert "recommendations" in data
+    assert "lint_issues" in data
+    assert isinstance(data["lint_issues"], list)
+
+
+def test_lint_skill_by_id_no_lint(client: TestClient, sample_repo: pathlib.Path):
+    """GET /{id}/lint with include_lint=false skips lint checks."""
+    resp = client.post(
+        "/api/v1/skills/discover",
+        json={"repository_path": str(sample_repo)},
+    )
+    assert resp.status_code == 201
+    skill_id = resp.json()["skills"][0]["id"]
+
+    resp = client.get(f"/api/v1/skills/{skill_id}/lint?include_lint=false")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["lint_issues"] == []
+
+
+def test_lint_skill_by_id_not_found(client: TestClient):
+    """GET /{id}/lint with unknown ID returns 404."""
+    resp = client.get("/api/v1/skills/99999/lint")
+    assert resp.status_code == 404
+
+
+def test_lint_skill_by_id_file_missing(client: TestClient, sample_repo: pathlib.Path, tmp_path: pathlib.Path):
+    """GET /{id}/lint returns 404 if skill file is missing from disk."""
+    # Discover skills
+    resp = client.post(
+        "/api/v1/skills/discover",
+        json={"repository_path": str(sample_repo)},
+    )
+    assert resp.status_code == 201
+    skill_id = resp.json()["skills"][0]["id"]
+
+    # Delete the skill file from disk
+    skill_path = resp.json()["skills"][0]["path"]
+    full_path = sample_repo / skill_path
+    full_path.unlink()
+
+    # Try to lint - should return 404
+    resp = client.get(f"/api/v1/skills/{skill_id}/lint")
+    assert resp.status_code == 404
+    assert "not found on disk" in resp.json()["detail"]

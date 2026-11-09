@@ -1,6 +1,20 @@
 # Changelog
 
+## 1.5.0 — work-in-progress checkpoint
+
+Partial code published for continued development. Known issues: STATUS.md.
+
 ## 1.4.0 — work-in-progress checkpoint
+
+### Added
+- New API endpoint `GET /api/v1/skills/{id}/lint` to retrieve lint report for a discovered skill by database ID
+- Fetches skill content from disk and runs validation/linting
+- Supports `include_lint` query parameter to optionally skip lint checks
+
+### Verified
+- All 71 backend tests pass
+- All 5 frontend tests pass
+- Skill-linter feature enhanced with lint-by-ID capability
 
 Partial code published for continued development. Known issues: STATUS.md.
 
