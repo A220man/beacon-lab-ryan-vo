@@ -18,5 +18,6 @@
     "ollama"
   ],
   "license": "MIT",
-  "status": "work-in-progress"
+  "status": "work-in-progress",
+  "version": "1.6.0"
 }
