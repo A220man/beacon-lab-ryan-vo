@@ -1,26 +1,25 @@
-"""OIDC authentication dependency for Keycloak JWT validation.
+"""OIDC authentication routes for Keycloak JWT validation and PKCE flow.
 
-Validates Keycloak-issued access tokens:
-- Issuer (iss) match against KEYCLOAK_ISSUER
-- Audience (aud) match against KEYCLOAK_CLIENT_ID
-- Token type and expiration checks
-- Role-based access control support
-
-This dependency can be used in FastAPI route dependencies:
-    from app.api.oidc import oidc_require_auth, oidc_optional
-
-Depends on authlib which is already in requirements.txt.
+Handles:
+- SPA PKCE login initiation
+- Authorization code callback with token exchange
+- Token validation (iss, aud checks)
+- Role-based scope authorization
+- Logout endpoint
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
-from typing import Optional
+import urllib.parse
+from typing import Any, Optional
 
 from authlib.jose import jwt
 from authlib.jose import JsonWebKey
-from fastapi import HTTPException, Request, Security, SecurityScopes
-from authlib.security.oauth2.rfc6749 import OAuth2User
-
+from fastapi.security import SecurityScopes
+from fastapi import APIRouter, HTTPException, Request, Response, Security
+from fastapi.responses import JSONResponse
 
 #: Environment configuration (populated at module load)
 KEYCLOAK_URL: str = os.environ.get("KEYCLOAK_URL", "http://localhost:8080")
@@ -36,35 +35,31 @@ ROLE_SCOPES: dict[str, list[str]] = {
 }
 
 
-def _get_public_key() -> JsonWebKey:
-    """Fetch the Keycloak public key for JWT verification.
-
-    In production, this should be cached and refreshed periodically.
-    For now, we fetch it fresh each request from the JWKS endpoint.
-    """
-    jwks_url = f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
-    import httpx
-    resp = httpx.get(jwks_url, timeout=5.0)
-    resp.raise_for_status()
-    return JsonWebKey.from_pem(resp.text)
-
-
 # Cached public key instance (refreshed on first use per process)
 _public_key: JsonWebKey | None = None
 
 
-def _get_cached_public_key() -> JsonWebKey:
+def _get_public_key() -> JsonWebKey:
+    """Fetch the Keycloak public key for JWT verification."""
     global _public_key
     if _public_key is None:
-        _public_key = _get_public_key()
+        jwks_url = f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
+        import httpx
+        resp = httpx.get(jwks_url, timeout=5.0)
+        resp.raise_for_status()
+        _public_key = JsonWebKey.from_pem(resp.text)
     return _public_key
+
+
+def _get_cached_public_key() -> JsonWebKey:
+    """Get cached public key, fetching if needed."""
+    return _get_public_key()
 
 
 def _decode_token(token: str) -> dict:
     """Decode and validate a JWT token using Keycloak's public key."""
     pub_key = _get_cached_public_key()
     try:
-        # authlib's jwt.decode validates iss, aud, exp, nbf automatically
         decoded = jwt.decode(
             token,
             pub_key,
@@ -72,7 +67,7 @@ def _decode_token(token: str) -> dict:
                 "iss": {"essential": True, "value": KEYCLOAK_ISSUER},
                 "aud": {"essential": True, "value": KEYCLOAK_CLIENT_ID},
             },
-            scope=[],  # We'll handle scope checking separately
+            scope=[],
         )
         return decoded
     except Exception as exc:
@@ -82,85 +77,178 @@ def _decode_token(token: str) -> dict:
         ) from exc
 
 
-def oidc_optional(request: Request) -> Optional[OAuth2User]:
-    """OIDC optional dependency - returns user if token present, else None.
-
-    Extracts the Bearer token from the Authorization header and validates
-    it against Keycloak. Returns None if no auth header or invalid token.
+# PKCE (Proof Key for Code Exchange) generation
+def generate_pkce_codes() -> tuple[str, str]:
+    """Generate PKCE code verifier and challenge.
+    
+    Returns:
+        tuple of (code_verifier, code_challenge)
     """
-    auth: str = request.headers.get("Authorization", "")
-    if not auth.lower().startswith("bearer "):
-        return None
+    code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b'=').decode()
+    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).rstrip(b'=').decode()
+    return code_verifier, code_challenge
 
-    token = auth[len("Bearer "):].strip()
-    try:
-        decoded = _decode_token(token)
-        # Build OAuth2User from decoded claims
-        user = OAuth2User(
-            id=str(decoded.get("sub", "")),
-            preferred_username=decoded.get("preferred_username", ""),
-            email=decoded.get("email"),
-            real_name=decoded.get("name"),
-            # Map Keycloak roles to our scope system
-            scopes=decoded.get("realm_access", {}).get("roles", []),
+
+def get_pkce_auth_url(code_verifier: str, state: str) -> str:
+    """Build the Keycloak authorization URL with PKCE and state parameters.
+    
+    Args:
+        code_verifier: The PKCE code verifier
+        state: CSRF protection state token
+    
+    Returns:
+        Authorization URL for redirect
+    """
+    params = {
+        "client_id": KEYCLOAK_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth/callback",
+        "scope": "openid profile email",
+        "code_challenge": code_verifier,
+        "code_challenge_method": "S256",
+        "state": state,
+    }
+    return f"{KEYCLOAK_ISSUER}/auth?{urllib.parse.urlencode(params)}"
+
+
+# Session storage for PKCE codes (in-memory per-process; replace with Redis/db for production)
+_pkce_store: dict[str, dict[str, str]] = {}
+
+
+def store_pkce_pair(state: str, code_verifier: str) -> None:
+    """Store a PKCE code verifier indexed by state for later verification."""
+    _pkce_store[state] = {"code_verifier": code_verifier}
+
+
+def verify_pkce_code(state: str, code_verifier: str) -> bool:
+    """Verify that the submitted code verifier matches the stored pair for this state."""
+    stored = _pkce_store.get(state)
+    if stored is None:
+        return False
+    return stored["code_verifier"] == code_verifier
+
+
+def cleanup_pkce_state(state: str) -> None:
+    """Remove the PKCE state entry after successful verification."""
+    _pkce_store.pop(state, None)
+
+
+def oidc_login(state: str | None = None) -> dict:
+    """Initiate OIDC login with PKCE.
+    
+    Generates a PKCE code pair and stores the verifier keyed by state.
+    Returns the authorization URL and state for the SPA to redirect to.
+    """
+    if state is None:
+        state = base64.urlsafe_b64encode(os.urandom(16)).rstrip(b'=').decode()
+    code_verifier, code_challenge = generate_pkce_codes()
+    store_pkce_pair(state, code_verifier)
+    auth_url = get_pkce_auth_url(code_verifier, state)
+    return {"auth_url": auth_url, "state": state}
+
+
+def oidc_callback(code: str, state: str, code_verifier: str) -> dict[str, Any]:
+    """Exchange authorization code for tokens at the PKCE callback.
+    
+    Validates the state, exchanges the code for tokens, and returns
+    the decoded user info.
+    """
+    # Verify state
+    if state not in _pkce_store:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired state parameter",
         )
-        return user
-    except HTTPException:
-        return None
-    except Exception:
-        return None
-
-
-def oidc_require_auth(
-    security_scopes: SecurityScopes,
-    request: Request,
-) -> OAuth2User:
-    """OIDC required dependency - raises 401 if no valid token or insufficient scopes.
-
-    Usage::
-        @router.get("/protected")
-        async def protected(user: Annotated[OAuth2User, Security(oidc_require_auth, scopes=["skills:read"])]):
-            return {"user": user.preferred_username}
-    """
-    auth: str = request.headers.get("Authorization", "")
-    if not auth.lower().startswith("bearer "):
+    
+    # Verify PKCE code verifier
+    if not verify_pkce_code(state, code_verifier):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid PKCE code verifier",
+        )
+    
+    # Clean up state after verification
+    cleanup_pkce_state(state)
+    
+    # Exchange authorization code for tokens
+    token_url = f"{KEYCLOAK_ISSUER}/protocol/openid-connect/token"
+    token_params = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth/callback",
+        "code_verifier": code_verifier,
+    }
+    
+    import httpx
+    resp = httpx.post(token_url, data=token_params, timeout=10.0)
+    if resp.status_code != 200:
         raise HTTPException(
             status_code=401,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail=f"Failed to exchange authorization code: {resp.text}",
         )
-
-    token = auth[len("Bearer "):].strip()
-    try:
-        decoded = _decode_token(token)
-    except HTTPException:
-        raise
-
-    # Check required security scopes
-    token_scopes: list[str] = decoded.get("realm_access", {}).get("roles", [])
-    missing: list[str] = [
-        scope for scope in security_scopes.scopes if scope not in token_scopes
-    ]
-    if missing:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Insufficient scopes: {', '.join(missing)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user = OAuth2User(
-        id=str(decoded.get("sub", "")),
-        preferred_username=decoded.get("preferred_username", ""),
-        email=decoded.get("email"),
-        real_name=decoded.get("name"),
-        scopes=token_scopes,
-    )
-    return user
+    
+    tokens = resp.json()
+    
+    # Decode the access token to get user info
+    access_token = tokens.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=401, detail="No access token in response")
+    
+    decoded = _decode_token(access_token)
+    
+    return {
+        "user": {
+            "sub": str(decoded.get("sub", "")),
+            "preferred_username": decoded.get("preferred_username", ""),
+            "email": decoded.get("email"),
+            "name": decoded.get("name"),
+            "roles": decoded.get("realm_access", {}).get("roles", []),
+        },
+        "tokens": tokens,
+    }
 
 
-def oidc_get_current_user(request: Request) -> Optional[OAuth2User]:
-    """Return the authenticated user if a valid token is present, else None.
+# Router for OIDC endpoints
+router = APIRouter(prefix="/oidc", tags=["oidc"])
 
-    Convenience wrapper for paths that want optional auth.
+
+@router.get("/login", include_in_schema=False)
+def login(state: str | None = None) -> Response:
+    """Initiate OIDC login with PKCE.
+    
+    Generates PKCE code pair, stores verifier keyed by state,
+    and returns the authorization URL for SPA redirect.
     """
-    return oidc_optional(request)
+    result = oidc_login(state=state)
+    return JSONResponse(content=result)
+
+
+@router.get("/callback", include_in_schema=False)
+def callback(
+    request: Request,
+) -> dict[str, Any]:
+    """Handle OIDC callback from Keycloak after user authorization.
+    
+    Exchanges the authorization code for tokens using PKCE verification.
+    Returns the authenticated user and tokens.
+    """
+    # Get authorization code and state from query params
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    
+    if not code or not state:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing code or state parameter",
+        )
+    
+    # Get code verifier from cookie (SPA stores it there during login)
+    code_verifier = request.cookies.get("pkce_verifier")
+    if not code_verifier:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing PKCE code verifier cookie",
+        )
+    
+    result = oidc_callback(code=code, state=state, code_verifier=code_verifier)
+    return result

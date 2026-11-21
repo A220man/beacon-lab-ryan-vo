@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.database import init_database
 from app.api.skills import router as skills_router
+from app.api.oidc import router as oidc_router
 
 VERSION = "1.0.0"
 
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
 
     # Routes
     app.include_router(skills_router, prefix="/api/v1/skills", tags=["skills"])
+    app.include_router(oidc_router, tags=["oidc"])
 
     # Initialize database on startup
     db_path = os.environ.get("DATABASE_PATH", "./data/beacon.db")
