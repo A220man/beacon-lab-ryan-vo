@@ -41,7 +41,7 @@
     {
       "id": "oidc-auth",
       "title": "OIDC Authentication via Keycloak",
-      "status": "planned",
+      "status": "in_progress",
       "acceptance": [
         "SPA PKCE login flow with state + nonce + PKCE",
         "Token validation against issuer/audience",
@@ -49,8 +49,12 @@
         "Logout endpoint with session cleanup",
         "Unauthenticated and role-denial tests pass"
       ],
-      "implementation": [],
-      "tests": []
+      "implementation": [
+        "backend/app/api/oidc.py - PKCE flow with nonce"
+      ],
+      "tests": [
+        "TODO: add OIDC integration tests"
+      ]
     },
     {
       "id": "llm-providers",
