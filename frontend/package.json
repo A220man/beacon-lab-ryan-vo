@@ -1,6 +1,6 @@
 {
   "name": "beacon-lab-ryan-vo",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "type": "module",
   "description": "Frontend for Beacon Lab \u2014 AI/ML developer tool for discovering agent skills",

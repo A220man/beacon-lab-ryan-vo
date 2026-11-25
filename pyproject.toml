@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "beacon-lab"
-version = "1.7.0"
+version = "1.8.0"
 description = "AI/ML developer tool for discovering, validating, and indexing agent skills"
 authors = [{name = "Ryan Vo", email = "ryandtvo@gmail.com"}]
 requires-python = ">=3.12"

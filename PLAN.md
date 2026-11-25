@@ -28,7 +28,7 @@ Tests: `backend/tests/test_engine.py`, `backend/tests/test_api.py`, `backend/tes
 
 ### oidc-auth — OIDC Authentication via Keycloak
 
-Status: planned
+Status: in_progress
 
 Acceptance:
 - SPA PKCE login flow with state + nonce + PKCE
@@ -36,6 +36,10 @@ Acceptance:
 - Role-based authorization (viewer/analyst/admin) on all endpoints
 - Logout endpoint with session cleanup
 - Unauthenticated and role-denial tests pass
+
+Implementation: `backend/app/api/oidc.py - PKCE flow with nonce`
+
+Tests: `TODO: add OIDC integration tests`
 
 ### llm-providers — LLM Provider Adapters
 

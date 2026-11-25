@@ -87,14 +87,22 @@ def generate_pkce_codes() -> tuple[str, str]:
     code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b'=').decode()
     code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).rstrip(b'=').decode()
     return code_verifier, code_challenge
+def generate_nonce() -> str:
+    """Generate a random nonce for OIDC authentication.
+
+    Returns:
+        A random string used as the OIDC nonce parameter.
+    """
+    return base64.urlsafe_b64encode(os.urandom(16)).rstrip(b'=').decode()
 
 
-def get_pkce_auth_url(code_verifier: str, state: str) -> str:
+def get_pkce_auth_url(code_verifier: str, state: str, nonce: str | None = None) -> str:
     """Build the Keycloak authorization URL with PKCE and state parameters.
     
     Args:
         code_verifier: The PKCE code verifier
         state: CSRF protection state token
+        nonce: OIDC nonce for replay protection
     
     Returns:
         Authorization URL for redirect
@@ -108,6 +116,8 @@ def get_pkce_auth_url(code_verifier: str, state: str) -> str:
         "code_challenge_method": "S256",
         "state": state,
     }
+    if nonce is not None:
+        params["nonce"] = nonce
     return f"{KEYCLOAK_ISSUER}/auth?{urllib.parse.urlencode(params)}"
 
 
@@ -137,17 +147,18 @@ def oidc_login(state: str | None = None) -> dict:
     """Initiate OIDC login with PKCE.
     
     Generates a PKCE code pair and stores the verifier keyed by state.
-    Returns the authorization URL and state for the SPA to redirect to.
+    Returns the authorization URL, state, and nonce for the SPA to redirect to.
     """
     if state is None:
         state = base64.urlsafe_b64encode(os.urandom(16)).rstrip(b'=').decode()
     code_verifier, code_challenge = generate_pkce_codes()
+    nonce = generate_nonce()
     store_pkce_pair(state, code_verifier)
-    auth_url = get_pkce_auth_url(code_verifier, state)
-    return {"auth_url": auth_url, "state": state}
+    auth_url = get_pkce_auth_url(code_verifier, state, nonce=nonce)
+    return {"auth_url": auth_url, "state": state, "nonce": nonce}
 
 
-def oidc_callback(code: str, state: str, code_verifier: str) -> dict[str, Any]:
+def oidc_callback(code: str, state: str, code_verifier: str, nonce: str | None = None) -> dict[str, Any]:
     """Exchange authorization code for tokens at the PKCE callback.
     
     Validates the state, exchanges the code for tokens, and returns
@@ -167,7 +178,12 @@ def oidc_callback(code: str, state: str, code_verifier: str) -> dict[str, Any]:
             detail="Invalid PKCE code verifier",
         )
     
-    # Clean up state after verification
+    # Verify and clean up nonce
+    if nonce is None or _pkce_store[state].get("nonce") != nonce:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or missing nonce",
+        )
     cleanup_pkce_state(state)
     
     # Exchange authorization code for tokens
@@ -235,6 +251,7 @@ def callback(
     # Get authorization code and state from query params
     code = request.query_params.get("code")
     state = request.query_params.get("state")
+    nonce = request.query_params.get("nonce")
     
     if not code or not state:
         raise HTTPException(
@@ -250,5 +267,15 @@ def callback(
             detail="Missing PKCE code verifier cookie",
         )
     
-    result = oidc_callback(code=code, state=state, code_verifier=code_verifier)
+    result = oidc_callback(code=code, state=state, code_verifier=code_verifier, nonce=nonce)
     return result
+
+
+@router.get("/logout", include_in_schema=False)
+def logout() -> dict[str, str]:
+    """Handle Keycloak logout.
+    
+    Redirects to the Keycloak end_session endpoint to clean up the user session.
+    """
+    end_session_url = f"{KEYCLOAK_ISSUER}/protocol/openid-connect/logout?redirect_uri={KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth/callback"
+    return {"end_session_url": end_session_url}
